@@ -3,6 +3,10 @@ import pandas as pd
 import numpy as np
 import plotly.express as px
 from io import BytesIO
+from preprocessing.encode import label_encoding, one_hot_encoding
+from preprocessing.scaling import scale_all , scale_one_col
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
+
 
 st.set_page_config(page_title="Advanced Data Preprocessing Tool", layout="wide")
 st.title("Advanced Data Preprocessing Tool")
@@ -105,6 +109,34 @@ if uploaded_file:
             df[col_to_handle].fillna(custom_value, inplace=True)
         st.success("Missing values handled!")
         st.dataframe(df)
+
+    
+    st.write("## Encoding")
+    categorical_col = df.select_dtypes(include=['object', 'category']).columns
+    if len(categorical_col) > 0:
+        selected_column = st.selectbox("Choose a categorical column to encode:", categorical_col)
+        method_encode = st.radio("Choose encoding method:", ["One-Hot Encoding", "Label Encoding"])
+        
+        if st.button("Apply Encoding"):
+            df = one_hot_encoding(df, selected_column) if method_encode == "One-Hot Encoding" else label_encoding(df, selected_column)
+            st.dataframe(df)
+
+    st.write("## Feature Scaling")
+    method_scaling = st.radio("Choose a scaling method", ["Standard Scaling", "Min-Max Scaling"])
+    scaler = StandardScaler() if method_scaling == "Standard Scaling" else MinMaxScaler()
+    option = st.radio("Choose type of scaling", ["Scale one column", "Scale all columns"])
+
+    if option == "Scale one column":
+        num_cols = df.select_dtypes(include=['float64', 'int64']).columns
+        selected_column = st.selectbox("Select column", num_cols)
+        if st.button("Apply Scaling"):
+            df = scale_one_col(df, selected_column, scaler)
+            st.dataframe(df)
+    elif option == "Scale all columns":
+        if st.button("Apply Scaling"):
+            df = scale_all(df, scaler)
+            st.dataframe(df)
+
 
     st.write("## Download Processed Data")
     output_format = st.selectbox("Select output format", ["CSV", "Excel"], key="output_format")
