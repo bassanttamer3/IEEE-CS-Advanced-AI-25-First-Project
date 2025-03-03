@@ -1,14 +1,42 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
 import plotly.express as px
 from io import BytesIO
-from preprocessing.encode import label_encoding, one_hot_encoding
-from preprocessing.scaling import scale_all , scale_one_col
+
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 
-st.set_page_config(page_title="Advanced Data Preprocessing Tool", layout="wide")
+def label_encoding(df, column):
+
+    df[column + '_Encoded'] = pd.factorize(df[column])[0]
+    return df
+
+
+def one_hot_encoding(df, column):
+
+    encoded = pd.get_dummies(df[column], prefix=column)
+    df = pd.concat([df, encoded], axis=1)
+    return df
+
+
+def scale_one_col(df, column, scaler):
+    df[f'{column}_scaled'] = scaler.fit_transform(df[[column]])
+    return df
+
+
+def scale_all(df, scaler):
+    numeric_cols = df.select_dtypes(include=['float64', 'int64']).columns
+    scaled_data = scaler.fit_transform(df[numeric_cols])
+    scaled_df = pd.DataFrame(scaled_data, columns=[
+                             f'{col}_scaled' for col in numeric_cols])
+    return pd.concat([df.reset_index(drop=True), scaled_df.reset_index(drop=True)], axis=1)
+
+
+st.set_page_config(
+    page_title="Advanced Data Preprocessing Tool", layout="wide")
 st.title("Advanced Data Preprocessing Tool")
 
 st.markdown("""
@@ -34,7 +62,8 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 st.sidebar.header("Upload Dataset")
-uploaded_file = st.sidebar.file_uploader("Upload CSV or Excel", type=["csv", "xlsx"])
+uploaded_file = st.sidebar.file_uploader(
+    "Upload CSV or Excel", type=["csv", "xlsx"])
 
 
 def load_data(file):
@@ -60,37 +89,47 @@ if uploaded_file:
     st.write("## Data Visualization")
     col1, col2 = st.columns(2)
     with col1:
-        col_to_viz = st.selectbox("Select a column to visualize", df.columns, key="viz_col")
+        col_to_viz = st.selectbox(
+            "Select a column to visualize", df.columns, key="viz_col")
     with col2:
-        plot_type = st.selectbox("Select plot type", ["Histogram", "Box Plot", "Bar Plot"], key="plot_type")
+        plot_type = st.selectbox("Select plot type", [
+                                 "Histogram", "Box Plot", "Bar Plot"], key="plot_type")
 
     if df[col_to_viz].dtype in ['int64', 'float64']:
         if plot_type == "Histogram":
-            fig = px.histogram(df, x=col_to_viz, nbins=20, title=f"Histogram of {col_to_viz}")
+            fig = px.histogram(df, x=col_to_viz, nbins=20,
+                               title=f"Histogram of {col_to_viz}")
             st.plotly_chart(fig)
         elif plot_type == "Box Plot":
             fig = px.box(df, y=col_to_viz, title=f"Box Plot of {col_to_viz}")
             st.plotly_chart(fig)
         elif plot_type == "Bar Plot":
-            st.error("Bar Plot is not suitable for numeric columns. Please select a categorical column.")
+            st.error(
+                "Bar Plot is not suitable for numeric columns. Please select a categorical column.")
     else:
         if plot_type == "Bar Plot":
-            fig = px.bar(df[col_to_viz].value_counts(), title=f"Bar Plot of {col_to_viz}")
+            fig = px.bar(df[col_to_viz].value_counts(),
+                         title=f"Bar Plot of {col_to_viz}")
             st.plotly_chart(fig)
         elif plot_type == "Histogram":
-            st.error("Histogram is not suitable for categorical columns. Please select a numeric column.")
+            st.error(
+                "Histogram is not suitable for categorical columns. Please select a numeric column.")
         elif plot_type == "Box Plot":
-            st.error("Box Plot is not suitable for categorical columns. Please select a numeric column.")
+            st.error(
+                "Box Plot is not suitable for categorical columns. Please select a numeric column.")
 
     missing_data = df.isnull().sum().reset_index()
     missing_data.columns = ["Column", "Missing Values"]
-    missing_data["Missing Percentage"] = (missing_data["Missing Values"] / len(df)) * 100
+    missing_data["Missing Percentage"] = (
+        missing_data["Missing Values"] / len(df)) * 100
     st.write("### Missing Values by Column")
     st.dataframe(missing_data)
 
     st.write("## Handle Missing Values")
-    col_to_handle = st.selectbox("Select column to handle missing values", df.columns, key="missing_col")
-    action = st.radio("Choose an action", ["Remove Rows", "Fill with Mean", "Fill with Mode", "Fill with Custom Value"], key="action")
+    col_to_handle = st.selectbox(
+        "Select column to handle missing values", df.columns, key="missing_col")
+    action = st.radio("Choose an action", [
+                      "Remove Rows", "Fill with Mean", "Fill with Mode", "Fill with Custom Value"], key="action")
 
     if action == "Fill with Custom Value":
         custom_value = st.text_input("Enter custom value", key="custom_value")
@@ -100,7 +139,8 @@ if uploaded_file:
             df = df.dropna(subset=[col_to_handle])
         elif action == "Fill with Mean":
             if df[col_to_handle].dtype in ['int64', 'float64']:
-                df[col_to_handle].fillna(df[col_to_handle].mean(), inplace=True)
+                df[col_to_handle].fillna(
+                    df[col_to_handle].mean(), inplace=True)
             else:
                 st.error("Cannot fill non-numeric columns with mean.")
         elif action == "Fill with Mode":
@@ -109,22 +149,55 @@ if uploaded_file:
             df[col_to_handle].fillna(custom_value, inplace=True)
         st.success("Missing values handled!")
         st.dataframe(df)
+# Feature Selection and Heatmap Visualization
+    st.write("## Feature Selection")
+    numerical_cols = df.select_dtypes(include=['float64', 'int64']).columns
+    if st.button("Show Correlation Heatmap"):
+        corr = df[numerical_cols].corr()
+        fig, ax = plt.subplots(figsize=(10, 8))
+        sns.heatmap(corr, annot=True, cmap='coolwarm', ax=ax)
+        st.pyplot(fig)
 
-    
+    col_to_drop_corr = st.selectbox(
+        "Select a column to drop (based on heatmap)", df.columns, key="drop_corr_col")
+    if st.button("Drop Column (Correlation)"):
+        df.drop(columns=[col_to_drop_corr], inplace=True)
+        st.success(f"Column '{col_to_drop_corr}' has been dropped.")
+        st.dataframe(df)
+ # Remove Redundant Features
+    st.write("## Remove Redundant Features")
+    selected_column_rrf = st.selectbox(
+        "Select a column to analyze redundancy", df.columns, key="rrf_col")
+    if st.button("Show Value Counts"):
+        value_counts = df[selected_column_rrf].value_counts()
+        st.write(value_counts)
+
+    col_to_drop = st.selectbox(
+        "Select a column to drop", df.columns, key="drop_col")
+    if st.button("Drop Column"):
+        df.drop(columns=[col_to_drop], inplace=True)
+        st.success(f"Column '{col_to_drop}' has been dropped.")
+        st.dataframe(df)
+
     st.write("## Encoding")
     categorical_col = df.select_dtypes(include=['object', 'category']).columns
     if len(categorical_col) > 0:
-        selected_column = st.selectbox("Choose a categorical column to encode:", categorical_col)
-        method_encode = st.radio("Choose encoding method:", ["One-Hot Encoding", "Label Encoding"])
-        
+        selected_column = st.selectbox(
+            "Choose a categorical column to encode:", categorical_col)
+        method_encode = st.radio("Choose encoding method:", [
+                                 "One-Hot Encoding", "Label Encoding"])
+
         if st.button("Apply Encoding"):
-            df = one_hot_encoding(df, selected_column) if method_encode == "One-Hot Encoding" else label_encoding(df, selected_column)
+            df = one_hot_encoding(
+                df, selected_column) if method_encode == "One-Hot Encoding" else label_encoding(df, selected_column)
             st.dataframe(df)
 
     st.write("## Feature Scaling")
-    method_scaling = st.radio("Choose a scaling method", ["Standard Scaling", "Min-Max Scaling"])
+    method_scaling = st.radio("Choose a scaling method", [
+                              "Standard Scaling", "Min-Max Scaling"])
     scaler = StandardScaler() if method_scaling == "Standard Scaling" else MinMaxScaler()
-    option = st.radio("Choose type of scaling", ["Scale one column", "Scale all columns"])
+    option = st.radio("Choose type of scaling", [
+                      "Scale one column", "Scale all columns"])
 
     if option == "Scale one column":
         num_cols = df.select_dtypes(include=['float64', 'int64']).columns
@@ -137,16 +210,18 @@ if uploaded_file:
             df = scale_all(df, scaler)
             st.dataframe(df)
 
-
     st.write("## Download Processed Data")
-    output_format = st.selectbox("Select output format", ["CSV", "Excel"], key="output_format")
+    output_format = st.selectbox("Select output format", [
+                                 "CSV", "Excel"], key="output_format")
     if output_format == "CSV":
         csv = df.to_csv(index=False).encode('utf-8')
-        st.download_button("Download CSV", csv, "processed_data.csv", "text/csv")
+        st.download_button("Download CSV", csv,
+                           "processed_data.csv", "text/csv")
     elif output_format == "Excel":
         excel_file = BytesIO()
         df.to_excel(excel_file, index=False)
-        st.download_button("Download Excel", excel_file, "processed_data.xlsx", "application/vnd.ms-excel")
+        st.download_button("Download Excel", excel_file,
+                           "processed_data.xlsx", "application/vnd.ms-excel")
 
 else:
     st.info("Please upload a dataset to get started.")
