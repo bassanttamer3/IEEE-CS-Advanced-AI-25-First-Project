@@ -7,6 +7,7 @@ from preprocessing.encode import label_encoding, one_hot_encoding
 from preprocessing.scaling import scale_all , scale_one_col
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
+
 st.set_page_config(page_title="Advanced Data Preprocessing Tool", layout="wide")
 st.title("Advanced Data Preprocessing Tool")
 
@@ -108,6 +109,7 @@ if uploaded_file:
             df[col_to_handle].fillna(custom_value, inplace=True)
         st.success("Missing values handled!")
         st.dataframe(df)
+
     
     st.write("## Encoding")
     categorical_col = df.select_dtypes(include=['object', 'category']).columns
@@ -134,6 +136,8 @@ if uploaded_file:
         if st.button("Apply Scaling"):
             df = scale_all(df, scaler)
             st.dataframe(df)
+
+
     st.write("## Download Processed Data")
     output_format = st.selectbox("Select output format", ["CSV", "Excel"], key="output_format")
     if output_format == "CSV":
